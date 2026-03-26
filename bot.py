@@ -1,6 +1,6 @@
 import os
 import asyncio
-from datetime import datetime
+from datetime import datetime, timedelta
 import aiosqlite
 
 from aiogram import Bot, Dispatcher, types, F
@@ -8,14 +8,9 @@ from aiogram.filters import Command
 from aiogram.types import CallbackQuery, Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from aiogram.webhook.aiohttp_server import SimpleRequestHandler
-from aiohttp import web
 
 # --- Переменные среды ---
 TOKEN = os.getenv("TOKEN")
-WEBHOOK_HOST = os.getenv("RAILWAY_STATIC_URL")
-WEBHOOK_PATH = f"/webhook/{TOKEN}"
-WEBHOOK_URL = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
@@ -105,15 +100,13 @@ async def pick_time(callback: CallbackQuery):
 async def send_reminder(user_id, text):
     await bot.send_message(user_id, f"⏰ Напоминание: {text}")
 
-# --- Вебхук и сервер ---
-app = web.Application()
-SimpleRequestHandler(dispatcher=dp, bot=bot).register(app, path=WEBHOOK_PATH)
-
-async def on_startup():
-    await bot.set_webhook(WEBHOOK_URL)
+# --- Главная функция для polling ---
+async def main():
     await init_db()
     await load_reminders()
     scheduler.start()
+    await dp.start_polling(bot)
 
-PORT = int(os.environ.get("PORT", 8080))
-web.run_app(app, host="0.0.0.0", port=PORT)  # <- последняя строка
+# --- Запуск ---
+if __name__ == "__main__":
+    asyncio.run(main())
