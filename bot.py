@@ -1,13 +1,11 @@
 import os
-PORT = int(os.environ.get("PORT", 8080))  # берем PORT от Railway
-web.run_app(app, host="0.0.0.0", port=PORT)import asyncio
+import asyncio
 from datetime import datetime
-from calendar import monthcalendar
 import aiosqlite
 
 from aiogram import Bot, Dispatcher, types, F
-from aiogram.types import CallbackQuery, Message
 from aiogram.filters import Command
+from aiogram.types import CallbackQuery, Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler
@@ -15,7 +13,7 @@ from aiohttp import web
 
 # --- Переменные среды ---
 TOKEN = os.getenv("TOKEN")
-WEBHOOK_HOST = os.getenv("RAILWAY_STATIC_URL")  # твой публичный URL Railway
+WEBHOOK_HOST = os.getenv("RAILWAY_STATIC_URL")
 WEBHOOK_PATH = f"/webhook/{TOKEN}"
 WEBHOOK_URL = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
 
@@ -24,7 +22,7 @@ dp = Dispatcher()
 scheduler = AsyncIOScheduler()
 user_data = {}
 
-# --- Инициализация базы ---
+# --- База данных ---
 async def init_db():
     async with aiosqlite.connect("reminders.db") as db:
         await db.execute("""
@@ -59,21 +57,10 @@ async def load_reminders():
                         args=[user_id, text]
                     )
 
-# --- Кнопки интерфейса ---
+# --- Кнопки и интерфейс ---
 def main_menu():
     kb = InlineKeyboardBuilder()
     kb.button(text="➕ Создать напоминание", callback_data="create")
-    return kb.as_markup()
-
-def create_calendar(year, month):
-    kb = InlineKeyboardBuilder()
-    for week in monthcalendar(year, month):
-        for day in week:
-            if day == 0:
-                kb.button(text=" ", callback_data="ignore")
-            else:
-                kb.button(text=str(day), callback_data=f"day_{year}_{month}_{day}")
-    kb.adjust(7)
     return kb.as_markup()
 
 def time_keyboard():
@@ -99,22 +86,15 @@ async def create_reminder(callback: CallbackQuery):
 async def get_text(message: Message):
     if message.from_user.id in user_data and "text" not in user_data[message.from_user.id]:
         user_data[message.from_user.id]["text"] = message.text
-        now = datetime.now()
-        await message.answer("Выбери дату:", reply_markup=create_calendar(now.year, now.month))
-
-@dp.callback_query(F.data.startswith("day_"))
-async def pick_day(callback: CallbackQuery):
-    _, year, month, day = callback.data.split("_")
-    user_data[callback.from_user.id]["date"] = f"{year}-{month}-{day}"
-    await callback.message.answer("Теперь выбери время:", reply_markup=time_keyboard())
-    await callback.answer()
+        await message.answer("Выбери время:", reply_markup=time_keyboard())
 
 @dp.callback_query(F.data.startswith("time_"))
 async def pick_time(callback: CallbackQuery):
     time = callback.data.split("_")[1]
     data = user_data[callback.from_user.id]
-    full_time = f"{data['date']} {time}"
-    dt = datetime.strptime(full_time, "%Y-%m-%d %H:%M")
+    now = datetime.now()
+    dt_str = f"{now.date()} {time}"
+    dt = datetime.strptime(dt_str, "%Y-%m-%d %H:%M")
     user_data[callback.from_user.id]["time"] = dt
     await add_reminder(callback.from_user.id, data["text"], str(dt))
     scheduler.add_job(send_reminder, 'date', run_date=dt, args=[callback.from_user.id, data["text"]])
@@ -134,9 +114,6 @@ async def on_startup():
     await init_db()
     await load_reminders()
     scheduler.start()
-
-async def on_shutdown():
-    await bot.delete_webhook()
 
 PORT = int(os.environ.get("PORT", 8080))
 web.run_app(app, host="0.0.0.0", port=PORT)
