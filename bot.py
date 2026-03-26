@@ -136,7 +136,27 @@ async def send_reminder(user_id, text):
 
 
 # --- ЗАПУСК ---
+async def load_reminders():
+    async with aiosqlite.connect("reminders.db") as db:
+        async with db.execute("SELECT user_id, text, time FROM reminders") as cursor:
+            rows = await cursor.fetchall()
+
+            for user_id, text, time in rows:
+                dt = datetime.fromisoformat(time)
+
+                if dt > datetime.now():
+                    scheduler.add_job(
+                        send_reminder,
+                        'date',
+                        run_date=dt,
+                        args=[user_id, text]
+                    )
+
 async def main():
+    await init_db()
+    await load_reminders()   # ← ВАЖНО
+    scheduler.start()
+    await dp.start_polling(bot)
     await init_db()
     scheduler.start()
     await dp.start_polling(bot)
