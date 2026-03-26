@@ -57,7 +57,7 @@ async def load_reminders():
                         args=[user_id, text]
                     )
 
-# --- Кнопки и интерфейс ---
+# --- Кнопки ---
 def main_menu():
     kb = InlineKeyboardBuilder()
     kb.button(text="➕ Создать напоминание", callback_data="create")
@@ -116,4 +116,4 @@ async def on_startup():
     scheduler.start()
 
 PORT = int(os.environ.get("PORT", 8080))
-web.run_app(app, host="0.0.0.0", port=PORT)
+web.run_app(app, host="0.0.0.0", port=PORT)  # <- последняя строка
