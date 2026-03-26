@@ -1,5 +1,6 @@
 import os
-import asyncio
+PORT = int(os.environ.get("PORT", 8080))  # берем PORT от Railway
+web.run_app(app, host="0.0.0.0", port=PORT)import asyncio
 from datetime import datetime
 from calendar import monthcalendar
 import aiosqlite
