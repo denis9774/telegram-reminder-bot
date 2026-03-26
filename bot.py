@@ -132,7 +132,7 @@ WEBHOOK_PATH = f"/webhook/{TOKEN}"
 WEBHOOK_URL = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
 
 async def on_startup():
-    await bot.set_webhook(WEBHOOK_URL)
+    await bot.set_webhook(f"{os.getenv('RAILWAY_STATIC_URL')}/webhook/{TOKEN}")
     await init_db()
     await load_reminders()
     scheduler.start()
