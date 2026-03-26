@@ -1,12 +1,9 @@
+import os
 import asyncio
-import aiosqlite
 from datetime import datetime
 from calendar import monthcalendar
-import os
-from aiohttp import web
+import aiosqlite
 
-PORT = int(os.environ.get("PORT", 8080))
-web.run_app(app, host="0.0.0.0", port=PORT)
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.types import CallbackQuery, Message
 from aiogram.filters import Command
@@ -15,15 +12,18 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler
 from aiohttp import web
 
-# --- Токен ---
+# --- Переменные среды ---
 TOKEN = os.getenv("TOKEN")
+WEBHOOK_HOST = os.getenv("RAILWAY_STATIC_URL")  # твой публичный URL Railway
+WEBHOOK_PATH = f"/webhook/{TOKEN}"
+WEBHOOK_URL = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
+
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 scheduler = AsyncIOScheduler()
-
 user_data = {}
 
-# --- БАЗА ---
+# --- Инициализация базы ---
 async def init_db():
     async with aiosqlite.connect("reminders.db") as db:
         await db.execute("""
@@ -58,7 +58,7 @@ async def load_reminders():
                         args=[user_id, text]
                     )
 
-# --- КНОПКИ ---
+# --- Кнопки интерфейса ---
 def main_menu():
     kb = InlineKeyboardBuilder()
     kb.button(text="➕ Создать напоминание", callback_data="create")
@@ -83,19 +83,17 @@ def time_keyboard():
     kb.adjust(2)
     return kb.as_markup()
 
-# --- СТАРТ ---
+# --- Хэндлеры ---
 @dp.message(Command("start"))
 async def start(message: Message):
     await message.answer("Привет! Я бот-напоминалка ⏰", reply_markup=main_menu())
 
-# --- СОЗДАНИЕ ---
 @dp.callback_query(F.data == "create")
 async def create_reminder(callback: CallbackQuery):
     user_data[callback.from_user.id] = {}
     await callback.message.answer("Напиши текст напоминания:")
     await callback.answer()
 
-# --- ТЕКСТ ---
 @dp.message()
 async def get_text(message: Message):
     if message.from_user.id in user_data and "text" not in user_data[message.from_user.id]:
@@ -103,7 +101,6 @@ async def get_text(message: Message):
         now = datetime.now()
         await message.answer("Выбери дату:", reply_markup=create_calendar(now.year, now.month))
 
-# --- ДАТА ---
 @dp.callback_query(F.data.startswith("day_"))
 async def pick_day(callback: CallbackQuery):
     _, year, month, day = callback.data.split("_")
@@ -111,7 +108,6 @@ async def pick_day(callback: CallbackQuery):
     await callback.message.answer("Теперь выбери время:", reply_markup=time_keyboard())
     await callback.answer()
 
-# --- ВРЕМЯ ---
 @dp.callback_query(F.data.startswith("time_"))
 async def pick_time(callback: CallbackQuery):
     time = callback.data.split("_")[1]
@@ -125,17 +121,15 @@ async def pick_time(callback: CallbackQuery):
     user_data.pop(callback.from_user.id)
     await callback.answer()
 
-# --- ОТПРАВКА ---
 async def send_reminder(user_id, text):
     await bot.send_message(user_id, f"⏰ Напоминание: {text}")
 
-# --- WEBHOOK для Railway ---
-WEBHOOK_HOST = os.getenv("RAILWAY_STATIC_URL")  # URL проекта Railway
-WEBHOOK_PATH = f"/webhook/{TOKEN}"
-WEBHOOK_URL = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
+# --- Вебхук и сервер ---
+app = web.Application()
+SimpleRequestHandler(dispatcher=dp, bot=bot).register(app, path=WEBHOOK_PATH)
 
 async def on_startup():
-    await bot.set_webhook(f"{os.getenv('RAILWAY_STATIC_URL')}/webhook/{TOKEN}")
+    await bot.set_webhook(WEBHOOK_URL)
     await init_db()
     await load_reminders()
     scheduler.start()
@@ -143,8 +137,5 @@ async def on_startup():
 async def on_shutdown():
     await bot.delete_webhook()
 
-app = web.Application()
-SimpleRequestHandler(dispatcher=dp, bot=bot).register(app, path=WEBHOOK_PATH)
-
-if __name__ == "__main__":
-    web.run_app(app, host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
+PORT = int(os.environ.get("PORT", 8080))
+web.run_app(app, host="0.0.0.0", port=PORT)
